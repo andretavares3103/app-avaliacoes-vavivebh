@@ -95,10 +95,11 @@ if not df_atend.empty:
             format_func=lambda os_num: f"{os_num} | {concluidos[concluidos['OS'].astype(str)==os_num]['Cliente'].values[0]} | {concluidos[concluidos['OS'].astype(str)==os_num]['Serviço'].values[0]}"
         )
         if st.button("Gerar links"):
-            app_url = st.secrets.get("app_url", st.runtime.get_url() or "https://SEU-APP.streamlit.app")
+            app_url = "https://andretavares3103-app-avaliacoes-vavivebh-main.streamlit.app"
             for os_num in selecao:
                 link_id = gerar_link_para_os(os_num)
                 st.write(f"OS: {os_num} | Link: {app_url}?link_id={link_id}")
+
 
 # -- Coleta do link_id da URL
 params = st.query_params
