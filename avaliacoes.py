@@ -95,14 +95,14 @@ if not df_atend.empty:
             format_func=lambda os_num: f"{os_num} | {concluidos[concluidos['OS'].astype(str)==os_num]['Cliente'].values[0]} | {concluidos[concluidos['OS'].astype(str)==os_num]['Serviço'].values[0]}"
         )
         if st.button("Gerar links"):
+            app_url = st.secrets.get("app_url", st.runtime.get_url() or "https://SEU-APP.streamlit.app")
             for os_num in selecao:
                 link_id = gerar_link_para_os(os_num)
-                app_url = st.experimental_get_query_params().get("app_url", ["https://SEU-APP.streamlit.app"])[0]
                 st.write(f"OS: {os_num} | Link: {app_url}?link_id={link_id}")
 
 # -- Coleta do link_id da URL
-params = st.experimental_get_query_params()
-link_id = params.get("link_id", [None])[0]
+params = st.query_params
+link_id = params.get("link_id", [None])[0] if "link_id" in params else None
 
 if link_id:
     dados = buscar_dados(link_id)
@@ -127,3 +127,4 @@ else:
     > **Para o cliente:** Envie para ele o link gerado!  
     O cliente vai clicar no link e já cair direto no formulário.
     """)
+
