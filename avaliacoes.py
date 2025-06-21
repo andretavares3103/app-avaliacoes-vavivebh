@@ -86,10 +86,11 @@ if st.button("🔄 Resetar links gerados (recriar para todos os atendimentos)"):
 uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
 if uploaded:
     df = pd.read_excel(uploaded)
-    # Remove espaços dos nomes das colunas
     df.columns = [col.strip() for col in df.columns]
+    st.write("Colunas da planilha:", df.columns.tolist())  # <- Adicione esta linha!
     df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
     st.success("Arquivo de atendimentos atualizado.")
+
 
 # -- Geração manual de links
 st.subheader("Gerar links de avaliação (para atendimentos concluídos)")
