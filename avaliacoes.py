@@ -12,6 +12,8 @@ st.set_page_config(page_title="Avaliação Vavivê", layout="centered")
 def carregar_bases():
     if os.path.exists(ATENDIMENTOS_ARQUIVO):
         df_atend = pd.read_excel(ATENDIMENTOS_ARQUIVO)
+        # Remove espaços dos nomes das colunas
+        df_atend.columns = [col.strip() for col in df_atend.columns]
     else:
         df_atend = pd.DataFrame()
     if os.path.exists(AVALIACOES_ARQUIVO):
@@ -43,6 +45,7 @@ def gerar_link_para_os(os_num):
 def buscar_dados(link_id):
     df_links = pd.read_csv(AVALIACOES_ARQUIVO)
     df_atend = pd.read_excel(ATENDIMENTOS_ARQUIVO)
+    df_atend.columns = [col.strip() for col in df_atend.columns]
     registro = df_links[df_links['link_id'] == link_id]
     if registro.empty:
         return None
@@ -79,11 +82,12 @@ if st.button("🔄 Resetar links gerados (recriar para todos os atendimentos)"):
         st.success("Arquivo de links apagado! Todos os atendimentos poderão receber novos links.")
         st.experimental_rerun()
 
-
 # -- Upload da planilha
 uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
 if uploaded:
     df = pd.read_excel(uploaded)
+    # Remove espaços dos nomes das colunas
+    df.columns = [col.strip() for col in df.columns]
     df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
     st.success("Arquivo de atendimentos atualizado.")
 
@@ -91,8 +95,10 @@ if uploaded:
 st.subheader("Gerar links de avaliação (para atendimentos concluídos)")
 
 df_atend, df_links, _ = carregar_bases()
-if not df_atend.empty:
-    concluidos = df_atend[df_atend['Status Serviço'].str.lower() == "concluido"]
+if not df_atend.empty and "Status Serviço" in df_atend.columns:
+    # Normaliza para pegar qualquer variação de espaço, maiúscula/minúscula
+    concluidos = df_atend[df_atend['Status Serviço'].astype(str).str.strip().str.lower() == "concluido"]
+    # Evita gerar duplicado
     concluidos = concluidos[~concluidos['OS'].astype(str).isin(df_links['OS'].astype(str))]
     if concluidos.empty:
         st.info("Nenhum atendimento 'Concluido' novo para gerar link.")
