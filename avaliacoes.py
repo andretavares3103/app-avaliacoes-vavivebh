@@ -77,6 +77,8 @@ if st.button("🔄 Resetar links gerados (recriar para todos os atendimentos)"):
     if os.path.exists(AVALIACOES_ARQUIVO):
         os.remove(AVALIACOES_ARQUIVO)
         st.success("Arquivo de links apagado! Todos os atendimentos poderão receber novos links.")
+        st.experimental_rerun()
+
 
 # -- Upload da planilha
 uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
