@@ -12,6 +12,7 @@ st.set_page_config(page_title="Avaliação Vavivê", layout="centered")
 def carregar_bases():
     if os.path.exists(ATENDIMENTOS_ARQUIVO):
         df_atend = pd.read_excel(ATENDIMENTOS_ARQUIVO)
+        # Remove espaços dos nomes das colunas
         df_atend.columns = [col.strip() for col in df_atend.columns]
     else:
         df_atend = pd.DataFrame()
@@ -74,56 +75,28 @@ def registrar_avaliacao(link_id, nota, observacao):
 
 st.title("Portal de Avaliação Vavivê")
 
-# -- Exibir/baixar base de links gerados
-with st.expander("📋 Ver/baixar links de avaliação já gerados"):
-    df_atend, df_links, df_resp = carregar_bases()
-    if not df_links.empty:
-        app_url = "https://andretavares3103-app-avaliacoes-vavivebh-main.streamlit.app"
-        # Monta status: respondido ou pendente
-        df_links = df_links.copy()
-        df_links['Status'] = df_links['link_id'].apply(lambda lid: "Respondido" if lid in df_resp['link_id'].values else "Pendente")
-        # Se quiser, mostra dados extras
-        df_merge = df_links.merge(df_atend, left_on="OS", right_on="OS", how="left")
-        df_merge['Link'] = app_url + "?link_id=" + df_merge['link_id']
-        st.dataframe(df_merge[['OS', 'Cliente', 'Serviço', 'Data 1', 'Prestador', 'Status', 'Link']])
-        csv = df_merge[['OS', 'Cliente', 'Serviço', 'Data 1', 'Prestador', 'Status', 'Link']].to_csv(index=False)
-        st.download_button("Baixar como CSV", csv, file_name="links_avaliacao.csv", mime="text/csv")
-    else:
-        st.info("Nenhum link gerado ainda.")
-
-# -- Botão de reset dos links (mantém respondidos)
-if st.button("🔄 Resetar links pendentes (recriar apenas para os atendimentos não respondidos)"):
+# Botão de reset dos links
+if st.button("🔄 Resetar links gerados (recriar para todos os atendimentos)"):
     if os.path.exists(AVALIACOES_ARQUIVO):
-        # Carrega bases antes de apagar
-        _, df_links, df_resp = carregar_bases()
-        # Mantém só links que já foram respondidos
-        df_links_responsed = df_links[df_links['link_id'].isin(df_resp['link_id'])]
-        df_links_responsed.to_csv(AVALIACOES_ARQUIVO, index=False)
-        st.success("Links pendentes removidos! Só atendimentos não respondidos podem receber novos links.")
+        os.remove(AVALIACOES_ARQUIVO)
+        st.success("Arquivo de links apagado! Todos os atendimentos poderão receber novos links.")
         st.experimental_rerun()
 
 # -- Upload da planilha
 uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
 if uploaded:
     df = pd.read_excel(uploaded)
+    # Remove espaços dos nomes das colunas
     df.columns = [col.strip() for col in df.columns]
-    st.write("Colunas carregadas:", df.columns.tolist())  # <-- Mostra sempre as colunas lidas!
-    
-    # Checagem das colunas obrigatórias
-    obrigatorias = ['OS', 'Status Serviço', 'Cliente', 'Serviço', 'Data 1', 'Prestador']
-    faltando = [col for col in obrigatorias if col not in df.columns]
-    if faltando:
-        st.error(f"⚠️ Atenção! As seguintes colunas obrigatórias não foram encontradas na sua planilha: {faltando}")
-    else:
-        df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
-        st.success("Arquivo de atendimentos atualizado.")
-
+    df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
+    st.success("Arquivo de atendimentos atualizado.")
 
 # -- Geração manual de links
 st.subheader("Gerar links de avaliação (para atendimentos concluídos)")
 
 df_atend, df_links, _ = carregar_bases()
 if not df_atend.empty and "Status Serviço" in df_atend.columns:
+    # Normaliza para pegar qualquer variação de espaço, maiúscula/minúscula
     concluidos = df_atend[df_atend['Status Serviço'].astype(str).str.strip().str.lower() == "concluido"]
     # Evita gerar duplicado
     concluidos = concluidos[~concluidos['OS'].astype(str).isin(df_links['OS'].astype(str))]
