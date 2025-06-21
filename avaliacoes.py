@@ -83,13 +83,21 @@ if st.button("🔄 Resetar links gerados (recriar para todos os atendimentos)"):
         st.experimental_rerun()
 
 # -- Upload da planilha
-uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
 if uploaded:
-    df = pd.read_excel(uploaded)
-    # Remove espaços dos nomes das colunas
-    df.columns = [col.strip() for col in df.columns]
-    df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
-    st.success("Arquivo de atendimentos atualizado.")
+    try:
+        df = pd.read_excel(uploaded, sheet_name="Clientes")
+        df.columns = [col.strip() for col in df.columns]
+        st.write("Colunas carregadas:", df.columns.tolist())
+        obrigatorias = ['OS', 'Status Serviço', 'Cliente', 'Serviço', 'Data 1', 'Prestador']
+        faltando = [col for col in obrigatorias if col not in df.columns]
+        if faltando:
+            st.error(f"⚠️ Atenção! As seguintes colunas obrigatórias não foram encontradas na sua planilha: {faltando}")
+        else:
+            df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
+            st.success("Arquivo de atendimentos atualizado.")
+    except ValueError as e:
+        st.error("⚠️ Não foi encontrada uma aba chamada 'Clientes' no arquivo Excel. Confira e tente novamente.")
+
 
 # -- Geração manual de links
 st.subheader("Gerar links de avaliação (para atendimentos concluídos)")
