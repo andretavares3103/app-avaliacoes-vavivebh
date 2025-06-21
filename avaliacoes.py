@@ -107,8 +107,17 @@ uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", 
 if uploaded:
     df = pd.read_excel(uploaded)
     df.columns = [col.strip() for col in df.columns]
-    df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
-    st.success("Arquivo de atendimentos atualizado.")
+    st.write("Colunas carregadas:", df.columns.tolist())  # <-- Mostra sempre as colunas lidas!
+    
+    # Checagem das colunas obrigatórias
+    obrigatorias = ['OS', 'Status Serviço', 'Cliente', 'Serviço', 'Data 1', 'Prestador']
+    faltando = [col for col in obrigatorias if col not in df.columns]
+    if faltando:
+        st.error(f"⚠️ Atenção! As seguintes colunas obrigatórias não foram encontradas na sua planilha: {faltando}")
+    else:
+        df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
+        st.success("Arquivo de atendimentos atualizado.")
+
 
 # -- Geração manual de links
 st.subheader("Gerar links de avaliação (para atendimentos concluídos)")
