@@ -83,6 +83,8 @@ if st.button("🔄 Resetar links gerados (recriar para todos os atendimentos)"):
         st.experimental_rerun()
 
 # -- Upload da planilha
+uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
+
 if uploaded:
     try:
         df = pd.read_excel(uploaded, sheet_name="Clientes")
