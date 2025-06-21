@@ -85,9 +85,9 @@ if st.button("🔄 Resetar links gerados (recriar para todos os atendimentos)"):
 # -- Upload da planilha
 uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
 if uploaded:
-    df = pd.read_excel(uploaded)
+    df = pd.read_excel(uploaded, sheet_name=0)  # ou sheet_name='Clientes'
     df.columns = [col.strip() for col in df.columns]
-    st.write("Colunas da planilha:", df.columns.tolist())  # <- Adicione esta linha!
+    st.write("Colunas da planilha:", df.columns.tolist())
     df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
     st.success("Arquivo de atendimentos atualizado.")
 
