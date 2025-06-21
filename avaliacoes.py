@@ -72,6 +72,12 @@ def registrar_avaliacao(link_id, nota, observacao):
 
 st.title("Portal de Avaliação Vavivê")
 
+# Botão de reset dos links
+if st.button("🔄 Resetar links gerados (recriar para todos os atendimentos)"):
+    if os.path.exists(AVALIACOES_ARQUIVO):
+        os.remove(AVALIACOES_ARQUIVO)
+        st.success("Arquivo de links apagado! Todos os atendimentos poderão receber novos links.")
+
 # -- Upload da planilha
 uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
 if uploaded:
@@ -100,7 +106,6 @@ if not df_atend.empty:
                 link_id = gerar_link_para_os(os_num)
                 st.write(f"OS: {os_num} | Link: {app_url}?link_id={link_id}")
 
-
 # -- Coleta do link_id da URL
 params = st.query_params
 link_id = params.get("link_id", [None])[0] if "link_id" in params else None
@@ -128,4 +133,3 @@ else:
     > **Para o cliente:** Envie para ele o link gerado!  
     O cliente vai clicar no link e já cair direto no formulário.
     """)
-
