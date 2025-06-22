@@ -133,7 +133,7 @@ if uploaded:
 st.subheader("Gerar links de avaliação (para atendimentos concluídos)")
 df_atend, df_links, df_resp = carregar_bases()
 if not df_atend.empty and "Status Serviço" in df_atend.columns:
-    concluidos = df_atend[df_atend['Status Serviço'].astype(str).str.strip().str.lower() == "concluido"]
+    concluidos = df_atend[df_atend['Status Serviço'].astype(str).str.strip().str.lower() != "cancelado"]
     concluidos = concluidos[~concluidos['OS'].astype(str).isin(df_links['OS'].astype(str))]
     if concluidos.empty:
         st.info("Nenhum atendimento 'Concluido' novo para gerar link.")
