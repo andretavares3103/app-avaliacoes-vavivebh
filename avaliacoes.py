@@ -86,6 +86,9 @@ def carregar_bases():
 def salvar_links(df_links):
     df_links.to_csv(AVALIACOES_ARQUIVO, index=False)
 
+def salvar_resposta(df_resp):
+    df_resp.to_csv(RESPOSTAS_ARQUIVO, index=False)
+
 def gerar_link_para_os(os_num):
     df_atend, df_links, _ = carregar_bases()
     if os_num in df_links['OS'].astype(str).values:
@@ -98,10 +101,11 @@ def gerar_link_para_os(os_num):
 
 st.title("Portal de Avaliação Vavivê")
 
-col_esq, col_dir = st.columns([1.1,1.5])
+col_esq, col_dir = st.columns([1,1])
 
+# ESQUERDA: Upload e geração de links
 with col_esq:
-    # Botão de reset: só para links NÃO respondidos
+    # Reset de links NÃO respondidos
     if st.button("🔄 Resetar links NÃO respondidos"):
         df_atend, df_links, df_resp = carregar_bases()
         if not df_links.empty and not df_resp.empty:
@@ -131,13 +135,13 @@ with col_esq:
             st.error("⚠️ Aba 'Clientes' não encontrada no arquivo.")
 
     # Geração manual de links
-    st.subheader("Gerar links de avaliação (para atendimentos não cancelados)")
+    st.subheader("Gerar links de avaliação (exceto cancelados)")
     df_atend, df_links, df_resp = carregar_bases()
     if not df_atend.empty and "Status Serviço" in df_atend.columns:
         concluidos = df_atend[df_atend['Status Serviço'].astype(str).str.strip().str.lower() != "cancelado"]
         concluidos = concluidos[~concluidos['OS'].astype(str).isin(df_links['OS'].astype(str))]
         if concluidos.empty:
-            st.info("Nenhum atendimento elegível novo para gerar link.")
+            st.info("Nenhum atendimento novo para gerar link.")
         else:
             selecao = st.multiselect(
                 "Selecione os atendimentos para gerar link:",
@@ -149,11 +153,7 @@ with col_esq:
                     link_id = gerar_link_para_os(os_num)
                     st.write(f"OS: {os_num} | Link: {APP_URL}?link_id={link_id}")
 
-    st.markdown("""
-    > **Para o cliente:** Envie para ele o link gerado!  
-    > O cliente vai clicar no link e já cair direto no formulário.
-    """)
-
+# DIREITA: Dashboard
 with col_dir:
     st.subheader("Dashboard dos Links de Avaliação")
     df_atend, df_links, df_resp = carregar_bases()
@@ -164,10 +164,25 @@ with col_dir:
         df_dashboard = df_dashboard.merge(df_atend, on='OS', how='left')
         df_dashboard = df_dashboard.merge(df_resp, on='link_id', how='left')
 
+        total_links = len(df_dashboard)
+        total_respondidos = df_dashboard['Respondido'].sum()
+        perc_respondidos = (total_respondidos / total_links * 100) if total_links > 0 else 0
+
+        # Média das notas (só dos respondidos)
+        notas_validas = pd.to_numeric(df_dashboard[df_dashboard['Respondido']]['nota'], errors='coerce').dropna()
+        media_nota = notas_validas.mean() if not notas_validas.empty else None
+
         col1, col2, col3 = st.columns(3)
-        col1.metric("Links criados", len(df_dashboard))
-        col2.metric("Respondidos", df_dashboard['Respondido'].sum())
-        col3.metric("Pendentes", (~df_dashboard['Respondido']).sum())
+        col1.metric("Links criados", total_links)
+        col2.metric("Respondidos", total_respondidos)
+        col3.metric("Pendentes", total_links - total_respondidos)
+
+        # NOVO BLOCO: % respondidos e média das notas
+        st.write(f"**% de respondidos:** {perc_respondidos:.1f}%")
+        if media_nota is not None:
+            st.write(f"**Média das notas (respondidos):** {media_nota:.2f}")
+        else:
+            st.write("**Média das notas:** Não há avaliações respondidas ainda.")
 
         # Download botão Excel
         output = BytesIO()
@@ -185,3 +200,9 @@ with col_dir:
         st.dataframe(df_dashboard)
     else:
         st.info("Nenhum link gerado ainda.")
+
+# Orientação final
+st.markdown("""
+> **Para o cliente:** Envie para ele o link gerado!  
+> O cliente vai clicar no link e já cair direto no formulário.
+""")
