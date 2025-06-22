@@ -155,9 +155,9 @@ if not df_atend.empty and "Status Serviço" in df_atend.columns:
 
 
 # -- Coleta do link_id da URL
-params = st.query_params
-st.write("DEBUG: params = ", params)
-link_id = params.get("link_id", [None])[0] if "link_id" in params else None
+query_params = st.experimental_get_query_params()
+st.write("DEBUG: query_params = ", query_params)
+link_id = query_params.get("link_id", [None])[0]
 st.write("DEBUG: link_id recebido da query = ", link_id)
 
 if link_id:
