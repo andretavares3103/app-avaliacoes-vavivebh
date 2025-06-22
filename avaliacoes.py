@@ -42,31 +42,17 @@ def gerar_link_para_os(os_num):
     return link_id
 
 def buscar_dados(link_id):
-    df_links = pd.read_csv(AVALIACOES_ARQUIVO)
+    df_links = pd.read_csv(AVALIACOES_ARQUIVO, dtype={"link_id": str})
     df_atend = pd.read_excel(ATENDIMENTOS_ARQUIVO)
     df_atend.columns = [col.strip() for col in df_atend.columns]
-    st.write("DEBUG: link_id", link_id)
-    st.write("DEBUG: df_links", df_links)
+    # Força ambos como string
+    df_links['link_id'] = df_links['link_id'].astype(str)
+    link_id = str(link_id)
     registro = df_links[df_links['link_id'] == link_id]
-    st.write("DEBUG: registro", registro)
-    
-    # DEBUG APENAS EM LOG
-    print("DEBUG: link_id recebido:", link_id)
-    if not os.path.exists(AVALIACOES_ARQUIVO):
-        print("Arquivo de links não encontrado!")
-        return None
-    df_links = pd.read_csv(AVALIACOES_ARQUIVO)
-    print("DEBUG: df_links head", df_links.head())
-    df_atend = pd.read_excel(ATENDIMENTOS_ARQUIVO)
-    df_atend.columns = [col.strip() for col in df_atend.columns]
-    print("DEBUG: df_atend head", df_atend.head())
-    registro = df_links[df_links['link_id'] == link_id]
-    print("DEBUG: registro", registro)
     if registro.empty:
         return None
     os_num = registro.iloc[0]['OS']
     dados = df_atend[df_atend['OS'].astype(str) == str(os_num)]
-    print("DEBUG: dados", dados)
     if dados.empty:
         return None
     row = dados.iloc[0]
