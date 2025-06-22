@@ -42,6 +42,14 @@ def gerar_link_para_os(os_num):
     return link_id
 
 def buscar_dados(link_id):
+    df_links = pd.read_csv(AVALIACOES_ARQUIVO)
+    df_atend = pd.read_excel(ATENDIMENTOS_ARQUIVO)
+    df_atend.columns = [col.strip() for col in df_atend.columns]
+    st.write("DEBUG: link_id", link_id)
+    st.write("DEBUG: df_links", df_links)
+    registro = df_links[df_links['link_id'] == link_id]
+    st.write("DEBUG: registro", registro)
+    
     # DEBUG APENAS EM LOG
     print("DEBUG: link_id recebido:", link_id)
     if not os.path.exists(AVALIACOES_ARQUIVO):
