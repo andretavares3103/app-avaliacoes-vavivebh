@@ -44,7 +44,7 @@ def salvar_resposta(df_resp):
 def gerar_link_para_os(os_num):
     df_atend, df_links, df_resp = carregar_bases()
     os_num = str(os_num)
-    # Se já existe e já foi respondido, não gera
+    # Se já existe e já foi respondido, não gera novo
     if os_num in df_links['OS'].values:
         link_id = df_links[df_links['OS'] == os_num]['link_id'].values[0]
         if link_id in df_resp['link_id'].values:
@@ -92,11 +92,10 @@ def registrar_avaliacao(link_id, nota, observacao):
 
 def resetar_links_nao_respondidos():
     _, df_links, df_resp = carregar_bases()
-    # Remove apenas links que NÃO estão em df_resp
     respondidos = set(df_resp['link_id'])
     df_links_restante = df_links[~df_links['link_id'].isin(respondidos)]
     if not df_links_restante.empty:
-        df_links = df_links[df_links['link_id'].isin(respondidos)]  # Fica só os respondidos
+        df_links = df_links[df_links['link_id'].isin(respondidos)]  # Mantém só os respondidos
         salvar_links(df_links)
     else:
         if os.path.exists(AVALIACOES_ARQUIVO):
@@ -106,8 +105,6 @@ def resetar_links_nao_respondidos():
 # ===================== UI PRINCIPAL =========================
 
 st.title("Portal de Avaliação Vavivê")
-
-# DASHBOARD DE LINKS
 st.header("📊 Dashboard de Links")
 df_atend, df_links, df_resp = carregar_bases()
 
@@ -126,7 +123,6 @@ if st.button("🔄 Resetar links NÃO respondidos"):
     resetar_links_nao_respondidos()
     st.rerun()
 
-
 # VISUALIZAÇÃO DE LINKS
 st.subheader("Visualização dos Links de Avaliação")
 if not df_links.empty:
@@ -141,66 +137,13 @@ else:
 uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
 if uploaded:
     try:
+        # *** DEBUG: Leitura da aba "Clientes" e mostra colunas ***
         df = pd.read_excel(uploaded, sheet_name="Clientes")
-        df.columns = [col.strip() for col in df.columns]
-        obrigatorias = ['OS', 'Status Serviço', 'Cliente', 'Serviço', 'Data 1', 'Prestador']
-        faltando = [col for col in obrigatorias if col not in df.columns]
-        if faltando:
-            st.error(f"⚠️ Atenção! As seguintes colunas obrigatórias não foram encontradas na sua planilha: {faltando}")
+        st.markdown("#### ⚙️ Debug das colunas lidas:")
+        st.write("Colunas encontradas:", df.columns.tolist())
+        if "Status Serviço" in df.columns:
+            st.write("Valores únicos em 'Status Serviço':", df["Status Serviço"].unique())
         else:
-            df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
-            st.success("Arquivo de atendimentos atualizado.")
-            st.rerun()
+            st.warning("Coluna 'Status Serviço' não encontrada na aba 'Clientes'.")
 
-    except Exception as e:
-        st.error(f"Erro ao processar planilha: {e}")
-
-# GERAR LINKS
-st.subheader("Gerar links de avaliação (para atendimentos concluídos)")
-df_atend, df_links, df_resp = carregar_bases()
-if not df_atend.empty and "Status Serviço" in df_atend.columns:
-    concluidos = df_atend[df_atend['Status Serviço'].astype(str).str.strip().str.lower() == "concluido"]
-    # Exclui atendimentos já respondidos
-    atendimentos_possiveis = concluidos[~concluidos['OS'].astype(str).isin(df_links[df_links['link_id'].isin(df_resp['link_id'])]['OS'])]
-    if atendimentos_possiveis.empty:
-        st.info("Nenhum atendimento 'Concluído' novo para gerar link.")
-    else:
-        selecao = st.multiselect(
-            "Selecione os atendimentos para gerar link:",
-            options=atendimentos_possiveis['OS'].astype(str),
-            format_func=lambda os_num: f"{os_num} | {atendimentos_possiveis[atendimentos_possiveis['OS'].astype(str)==os_num]['Cliente'].values[0]} | {atendimentos_possiveis[atendimentos_possiveis['OS'].astype(str)==os_num]['Serviço'].values[0]}"
-        )
-        if st.button("Gerar links"):
-            app_url = "https://app-avaliacoes-vavivebh.streamlit.app"
-            for os_num in selecao:
-                link_id, _ = gerar_link_para_os(os_num)
-                st.write(f"OS: {os_num} | Link: {app_url}?link_id={link_id}")
-
-# FORMULÁRIO DE AVALIAÇÃO
-query_params = st.query_params
-link_id = query_params.get("link_id", [None])[0] if "link_id" in query_params else None
-
-if link_id:
-    dados = buscar_dados(link_id)
-    if not dados:
-        st.error("Link inválido ou não encontrado.")
-    else:
-        st.header("Avalie seu atendimento")
-        st.info(f"""
-        **OS:** {dados['OS']}
-        **Cliente:** {dados['Cliente']}
-        **Serviço:** {dados['Serviço']}
-        **Data:** {dados['Data 1']}
-        **Prestador:** {dados['Prestador']}
-        """)
-        nota = st.radio("Avaliação (1=ruim, 5=ótimo)", [1,2,3,4,5], horizontal=True)
-        obs = st.text_area("Observações (opcional)")
-        if st.button("Enviar avaliação"):
-            msg = registrar_avaliacao(link_id, nota, obs)
-            st.success(msg)
-else:
-    st.markdown("""
-    > **Para o cliente:** Envie para ele o link gerado!  
-    O cliente vai clicar no link e já cair direto no formulário.
-    """)
-
+        df.columns = [col.strip() for]()
