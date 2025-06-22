@@ -124,6 +124,7 @@ if not df_atend.empty and "Status Serviço" in df_atend.columns:
                 link_id = gerar_link_para_os(os_num)
                 st.write(f"OS: {os_num} | Link: {app_url}?link_id={link_id}")
 
+
 # -- Coleta do link_id da URL
 params = st.query_params
 link_id = params.get("link_id", [None])[0] if "link_id" in params else None
