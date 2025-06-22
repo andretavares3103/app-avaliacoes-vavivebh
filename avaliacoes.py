@@ -124,7 +124,8 @@ st.markdown(f"""
 # Botão para resetar somente links NÃO respondidos
 if st.button("🔄 Resetar links NÃO respondidos"):
     resetar_links_nao_respondidos()
-    st.experimental_rerun()
+    st.rerun()
+
 
 # VISUALIZAÇÃO DE LINKS
 st.subheader("Visualização dos Links de Avaliação")
@@ -149,7 +150,8 @@ if uploaded:
         else:
             df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
             st.success("Arquivo de atendimentos atualizado.")
-            st.experimental_rerun()
+            st.rerun()
+
     except Exception as e:
         st.error(f"Erro ao processar planilha: {e}")
 
