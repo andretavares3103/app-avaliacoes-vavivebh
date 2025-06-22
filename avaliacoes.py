@@ -104,7 +104,7 @@ def gerar_link_para_os(os_num):
     return link_id
 
 # 3️⃣ INTERFACE ADMIN (2 colunas)
-st.title("Portal de Avaliação Vavivê")
+st.title("BELO HORIZONTE || Portal de Avaliação Vavivê")
 
 col_esq, col_dir = st.columns([1, 2])
 
