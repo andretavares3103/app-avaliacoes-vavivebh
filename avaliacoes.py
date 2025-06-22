@@ -43,14 +43,22 @@ def gerar_link_para_os(os_num):
     return link_id
 
 def buscar_dados(link_id):
+    st.write("DEBUG: link_id recebido:", link_id)
+    if not os.path.exists(AVALIACOES_ARQUIVO):
+        st.error("Arquivo de links não encontrado!")
+        return None
     df_links = pd.read_csv(AVALIACOES_ARQUIVO)
+    st.write("DEBUG: df_links head", df_links.head())
     df_atend = pd.read_excel(ATENDIMENTOS_ARQUIVO)
+    st.write("DEBUG: df_atend head", df_atend.head())
     df_atend.columns = [col.strip() for col in df_atend.columns]
     registro = df_links[df_links['link_id'] == link_id]
+    st.write("DEBUG: registro", registro)
     if registro.empty:
         return None
     os_num = registro.iloc[0]['OS']
     dados = df_atend[df_atend['OS'].astype(str) == str(os_num)]
+    st.write("DEBUG: dados", dados)
     if dados.empty:
         return None
     row = dados.iloc[0]
@@ -61,6 +69,7 @@ def buscar_dados(link_id):
         "Data 1": row['Data 1'],
         "Prestador": row['Prestador']
     }
+
 
 def registrar_avaliacao(link_id, nota, observacao):
     df_resp = pd.read_csv(RESPOSTAS_ARQUIVO) if os.path.exists(RESPOSTAS_ARQUIVO) else pd.DataFrame(columns=['link_id', 'nota', 'observacao'])
