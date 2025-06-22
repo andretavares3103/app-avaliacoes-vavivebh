@@ -75,6 +75,26 @@ def registrar_avaliacao(link_id, nota, observacao):
 
 st.title("Portal de Avaliação Vavivê")
 
+import os
+
+st.markdown("### ⚠️ Reset geral")
+if st.button("Resetar tudo (atendimentos, links e respostas)"):
+    arquivos = ["atendimentos.xlsx", "avaliacoes_links.csv", "avaliacoes_respostas.csv"]
+    erros = []
+    for arq in arquivos:
+        try:
+            if os.path.exists(arq):
+                os.remove(arq)
+        except Exception as e:
+            erros.append(f"{arq}: {e}")
+    if not erros:
+        st.success("Todos os dados foram apagados! Faça upload de uma nova planilha para começar do zero.")
+        st.stop()  # Para tudo após o reset
+    else:
+        st.error("Erro(s) ao apagar arquivos: " + ", ".join(erros))
+
+
+
 # Botão de reset dos links
 if st.button("🔄 Resetar links gerados (recriar para todos os atendimentos)"):
     if os.path.exists(AVALIACOES_ARQUIVO):
