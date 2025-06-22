@@ -1,5 +1,3 @@
-
-
 import pandas as pd
 import streamlit as st
 import uuid
@@ -8,13 +6,13 @@ import os
 ATENDIMENTOS_ARQUIVO = "atendimentos.xlsx"
 AVALIACOES_ARQUIVO = "avaliacoes_links.csv"
 RESPOSTAS_ARQUIVO = "avaliacoes_respostas.csv"
+APP_URL = "https://app-avaliacoes-vavivebh.streamlit.app"
 
 st.set_page_config(page_title="Avaliação Vavivê", layout="centered")
 
 def carregar_bases():
     if os.path.exists(ATENDIMENTOS_ARQUIVO):
         df_atend = pd.read_excel(ATENDIMENTOS_ARQUIVO)
-        # Remove espaços dos nomes das colunas
         df_atend.columns = [col.strip() for col in df_atend.columns]
     else:
         df_atend = pd.DataFrame()
@@ -45,22 +43,17 @@ def gerar_link_para_os(os_num):
     return link_id
 
 def buscar_dados(link_id):
-    st.write("DEBUG: link_id recebido:", link_id)
     if not os.path.exists(AVALIACOES_ARQUIVO):
         st.error("Arquivo de links não encontrado!")
         return None
     df_links = pd.read_csv(AVALIACOES_ARQUIVO)
-    st.write("DEBUG: df_links head", df_links.head())
     df_atend = pd.read_excel(ATENDIMENTOS_ARQUIVO)
-    st.write("DEBUG: df_atend head", df_atend.head())
     df_atend.columns = [col.strip() for col in df_atend.columns]
     registro = df_links[df_links['link_id'] == link_id]
-    st.write("DEBUG: registro", registro)
     if registro.empty:
         return None
     os_num = registro.iloc[0]['OS']
     dados = df_atend[df_atend['OS'].astype(str) == str(os_num)]
-    st.write("DEBUG: dados", dados)
     if dados.empty:
         return None
     row = dados.iloc[0]
@@ -72,7 +65,6 @@ def buscar_dados(link_id):
         "Prestador": row['Prestador']
     }
 
-
 def registrar_avaliacao(link_id, nota, observacao):
     df_resp = pd.read_csv(RESPOSTAS_ARQUIVO) if os.path.exists(RESPOSTAS_ARQUIVO) else pd.DataFrame(columns=['link_id', 'nota', 'observacao'])
     if link_id in df_resp['link_id'].values:
@@ -82,64 +74,47 @@ def registrar_avaliacao(link_id, nota, observacao):
     salvar_resposta(df_resp)
     return "Obrigado pela sua avaliação!"
 
-# ------------------ UI PRINCIPAL ------------------
+# ------------------- UI PRINCIPAL -------------------
 
 st.title("Portal de Avaliação Vavivê")
 
-import os
-
-st.markdown("### ⚠️ Reset geral")
-if st.button("Resetar tudo (atendimentos, links e respostas)"):
-    arquivos = ["atendimentos.xlsx", "avaliacoes_links.csv", "avaliacoes_respostas.csv"]
-    erros = []
-    for arq in arquivos:
-        try:
-            if os.path.exists(arq):
-                os.remove(arq)
-        except Exception as e:
-            erros.append(f"{arq}: {e}")
-    if not erros:
-        st.success("Todos os dados foram apagados! Faça upload de uma nova planilha para começar do zero.")
-        st.stop()  # Para tudo após o reset
-    else:
-        st.error("Erro(s) ao apagar arquivos: " + ", ".join(erros))
-
-
-
-# Botão de reset dos links
-if st.button("🔄 Resetar links gerados (recriar para todos os atendimentos)"):
-    if os.path.exists(AVALIACOES_ARQUIVO):
+# Botão de reset: só para links NÃO respondidos
+if st.button("🔄 Resetar links NÃO respondidos"):
+    # Carrega bases
+    df_atend, df_links, df_resp = carregar_bases()
+    # Só mantém links que já possuem resposta
+    if not df_links.empty and not df_resp.empty:
+        responded_ids = set(df_resp['link_id'])
+        df_links = df_links[df_links['link_id'].isin(responded_ids)]
+        salvar_links(df_links)
+        st.success("Links pendentes foram resetados. Links já respondidos foram mantidos.")
+    elif not df_links.empty:
         os.remove(AVALIACOES_ARQUIVO)
-        st.success("Arquivo de links apagado! Todos os atendimentos poderão receber novos links.")
-        st.rerun()
+        st.success("Todos os links foram resetados.")
+    st.rerun()
 
-# -- Upload da planilha
+# Upload planilha
 uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
-
 if uploaded:
     try:
         df = pd.read_excel(uploaded, sheet_name="Clientes")
         df.columns = [col.strip() for col in df.columns]
-        st.write("Colunas carregadas:", df.columns.tolist())
         obrigatorias = ['OS', 'Status Serviço', 'Cliente', 'Serviço', 'Data 1', 'Prestador']
         faltando = [col for col in obrigatorias if col not in df.columns]
         if faltando:
-            st.error(f"⚠️ Atenção! As seguintes colunas obrigatórias não foram encontradas na sua planilha: {faltando}")
+            st.error(f"⚠️ Colunas obrigatórias ausentes: {faltando}")
         else:
             df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
             st.success("Arquivo de atendimentos atualizado.")
-    except ValueError as e:
-        st.error("⚠️ Não foi encontrada uma aba chamada 'Clientes' no arquivo Excel. Confira e tente novamente.")
+    except ValueError:
+        st.error("⚠️ Aba 'Clientes' não encontrada no arquivo.")
 
-
-# -- Geração manual de links
+# Geração manual de links
 st.subheader("Gerar links de avaliação (para atendimentos concluídos)")
-
-df_atend, df_links, _ = carregar_bases()
+df_atend, df_links, df_resp = carregar_bases()
 if not df_atend.empty and "Status Serviço" in df_atend.columns:
-    # Normaliza para pegar qualquer variação de espaço, maiúscula/minúscula
     concluidos = df_atend[df_atend['Status Serviço'].astype(str).str.strip().str.lower() == "concluido"]
-    # Evita gerar duplicado
+    # Filtra os que ainda NÃO têm resposta
     concluidos = concluidos[~concluidos['OS'].astype(str).isin(df_links['OS'].astype(str))]
     if concluidos.empty:
         st.info("Nenhum atendimento 'Concluido' novo para gerar link.")
@@ -150,19 +125,37 @@ if not df_atend.empty and "Status Serviço" in df_atend.columns:
             format_func=lambda os_num: f"{os_num} | {concluidos[concluidos['OS'].astype(str)==os_num]['Cliente'].values[0]} | {concluidos[concluidos['OS'].astype(str)==os_num]['Serviço'].values[0]}"
         )
         if st.button("Gerar links"):
-            app_url = "https://app-avaliacoes-vavivebh.streamlit.app"
             for os_num in selecao:
                 link_id = gerar_link_para_os(os_num)
-                st.write(f"OS: {os_num} | Link: {app_url}?link_id={link_id}")
+                st.write(f"OS: {os_num} | Link: {APP_URL}?link_id={link_id}")
 
+# DASHBOARD DE LINKS
+st.subheader("Dashboard dos Links de Avaliação")
+df_atend, df_links, df_resp = carregar_bases()
+if not df_links.empty:
+    # Marca respondido/não respondido
+    df_dashboard = df_links.copy()
+    df_dashboard['Respondido'] = df_dashboard['link_id'].isin(df_resp['link_id'])
+    df_dashboard = df_dashboard.merge(df_atend[['OS', 'Cliente', 'Serviço', 'Data 1', 'Prestador']], on='OS', how='left')
+    # Exibe métricas
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Links criados", len(df_dashboard))
+    col2.metric("Respondidos", df_dashboard['Respondido'].sum())
+    col3.metric("Pendentes", (~df_dashboard['Respondido']).sum())
+    # Tabela
+    st.dataframe(df_dashboard.rename(columns={
+        "link_id": "LinkID",
+        "OS": "OS",
+        "Cliente": "Cliente",
+        "Serviço": "Serviço",
+        "Data 1": "Data",
+        "Prestador": "Profissional"
+    })[["OS", "Cliente", "Serviço", "Data", "Profissional", "LinkID", "Respondido"]])
+else:
+    st.info("Nenhum link gerado ainda.")
 
-# -- Coleta do link_id da URL
-query_params = st.query_params
-st.write("DEBUG: query_params = ", query_params)
-link_id = query_params.get("link_id", None)
-st.write("DEBUG: link_id recebido da query = ", link_id)
-
-
+# Formulário de avaliação via link_id (igual antes)
+link_id = st.query_params.get("link_id", None)
 if link_id:
     dados = buscar_dados(link_id)
     if not dados:
