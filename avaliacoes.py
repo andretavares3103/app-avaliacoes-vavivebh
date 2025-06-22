@@ -1,4 +1,3 @@
-Acho que o codigo que estou usando ja esta correto
 
 
 import pandas as pd
