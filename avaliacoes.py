@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 import uuid
 import os
+from io import BytesIO
 
 ATENDIMENTOS_ARQUIVO = "atendimentos.xlsx"
 AVALIACOES_ARQUIVO = "avaliacoes_links.csv"
@@ -13,6 +14,7 @@ st.set_page_config(page_title="Avaliação Vavivê", layout="wide")
 # ------------------ BLOCO VISÍVEL PARA CLIENTES (FORMULÁRIO) ------------------
 link_id = st.query_params.get("link_id", None)
 if link_id:
+    # Funções mínimas para busca e resposta
     def buscar_dados(link_id):
         if not os.path.exists(AVALIACOES_ARQUIVO):
             st.error("Arquivo de links não encontrado!")
@@ -84,9 +86,6 @@ def carregar_bases():
 def salvar_links(df_links):
     df_links.to_csv(AVALIACOES_ARQUIVO, index=False)
 
-def salvar_resposta(df_resp):
-    df_resp.to_csv(RESPOSTAS_ARQUIVO, index=False)
-
 def gerar_link_para_os(os_num):
     df_atend, df_links, _ = carregar_bases()
     if os_num in df_links['OS'].astype(str).values:
@@ -97,12 +96,12 @@ def gerar_link_para_os(os_num):
         salvar_links(df_links)
     return link_id
 
-# ---------- LAYOUT DE 2 COLUNAS ----------
-col_esq, col_dir = st.columns([1,2])  # Dashboard ocupa mais espaço
+st.title("Portal de Avaliação Vavivê")
+
+col_esq, col_dir = st.columns([1.1,1.5])
 
 with col_esq:
-    st.title("Portal de Avaliação Vavivê")
-
+    # Botão de reset: só para links NÃO respondidos
     if st.button("🔄 Resetar links NÃO respondidos"):
         df_atend, df_links, df_resp = carregar_bases()
         if not df_links.empty and not df_resp.empty:
@@ -115,6 +114,7 @@ with col_esq:
             st.success("Todos os links foram resetados.")
         st.rerun()
 
+    # Upload planilha
     uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
     if uploaded:
         try:
@@ -130,13 +130,14 @@ with col_esq:
         except ValueError:
             st.error("⚠️ Aba 'Clientes' não encontrada no arquivo.")
 
-    st.subheader("Gerar links de avaliação (para atendimentos concluídos)")
+    # Geração manual de links
+    st.subheader("Gerar links de avaliação (para atendimentos não cancelados)")
     df_atend, df_links, df_resp = carregar_bases()
     if not df_atend.empty and "Status Serviço" in df_atend.columns:
         concluidos = df_atend[df_atend['Status Serviço'].astype(str).str.strip().str.lower() != "cancelado"]
         concluidos = concluidos[~concluidos['OS'].astype(str).isin(df_links['OS'].astype(str))]
         if concluidos.empty:
-            st.info("Nenhum atendimento novo para gerar link.")
+            st.info("Nenhum atendimento elegível novo para gerar link.")
         else:
             selecao = st.multiselect(
                 "Selecione os atendimentos para gerar link:",
@@ -148,31 +149,39 @@ with col_esq:
                     link_id = gerar_link_para_os(os_num)
                     st.write(f"OS: {os_num} | Link: {APP_URL}?link_id={link_id}")
 
-with col_dir:
-    st.subheader("Dashboard dos Links de Avaliação")
-    df_atend, df_links, df_resp = carregar_bases()
-    if not df_links.empty:
-        df_dashboard = df_links.copy()
-        df_dashboard['Respondido'] = df_dashboard['link_id'].isin(df_resp['link_id'])
-        df_dashboard = df_dashboard.merge(df_atend[['OS', 'Cliente', 'Serviço', 'Data 1', 'Prestador']], on='OS', how='left')
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Links criados", len(df_dashboard))
-        col2.metric("Respondidos", df_dashboard['Respondido'].sum())
-        col3.metric("Pendentes", (~df_dashboard['Respondido']).sum())
-        st.dataframe(df_dashboard.rename(columns={
-            "link_id": "LinkID",
-            "OS": "OS",
-            "Cliente": "Cliente",
-            "Serviço": "Serviço",
-            "Data 1": "Data",
-            "Prestador": "Profissional"
-        })[["OS", "Cliente", "Serviço", "Data", "Profissional", "LinkID", "Respondido"]])
-    else:
-        st.info("Nenhum link gerado ainda.")
-
-# Orientação final para admin
-with col_esq:
     st.markdown("""
     > **Para o cliente:** Envie para ele o link gerado!  
     > O cliente vai clicar no link e já cair direto no formulário.
     """)
+
+with col_dir:
+    st.subheader("Dashboard dos Links de Avaliação")
+    df_atend, df_links, df_resp = carregar_bases()
+    if not df_links.empty:
+        # Merge para todos os campos
+        df_dashboard = df_links.copy()
+        df_dashboard['Respondido'] = df_dashboard['link_id'].isin(df_resp['link_id'])
+        df_dashboard = df_dashboard.merge(df_atend, on='OS', how='left')
+        df_dashboard = df_dashboard.merge(df_resp, on='link_id', how='left')
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Links criados", len(df_dashboard))
+        col2.metric("Respondidos", df_dashboard['Respondido'].sum())
+        col3.metric("Pendentes", (~df_dashboard['Respondido']).sum())
+
+        # Download botão Excel
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_dashboard.to_excel(writer, index=False, sheet_name='Links')
+        xlsx_data = output.getvalue()
+        st.download_button(
+            label="📥 Baixar tabela Excel completa",
+            data=xlsx_data,
+            file_name="links_avaliacao_completo.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        # Exibe tabela
+        st.dataframe(df_dashboard)
+    else:
+        st.info("Nenhum link gerado ainda.")
