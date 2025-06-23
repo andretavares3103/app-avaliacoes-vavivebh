@@ -9,7 +9,7 @@ AVALIACOES_ARQUIVO = "avaliacoes_links.csv"
 RESPOSTAS_ARQUIVO = "avaliacoes_respostas.csv"
 APP_URL = "https://app-avaliacoes-vavivebh.streamlit.app"
 
-st.set_page_config(page_title="Avaliação Vavivê", layout="wide")
+st.set_page_config(page_title="Avaliação Vavivê BH", layout="wide")
 
 # 1️⃣ FORMULÁRIO DO CLIENTE (acesso por link)
 link_id = st.query_params.get("link_id", None)
