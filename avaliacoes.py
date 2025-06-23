@@ -50,12 +50,16 @@ if link_id:
     if not dados:
         st.error("Link inválido ou não encontrado.")
     else:
-        st.header("Avalie seu atendimento")
+        st.header("Olá, queremos ouvir você! Avalie seu atendimento!")
         st.info(f"""
         **OS:** {dados['OS']}
+        
         **Cliente:** {dados['Cliente']}
+        
         **Serviço:** {dados['Serviço']}
+        
         **Data:** {dados['Data 1']}
+        
         **Prestador:** {dados['Prestador']}
         """)
         nota = st.radio("Avaliação (1=ruim, 5=ótimo)", [1,2,3,4,5], horizontal=True)
@@ -99,7 +103,7 @@ def gerar_link_para_os(os_num):
     return link_id
 
 # 3️⃣ INTERFACE ADMIN (2 colunas)
-st.title("Portal de Avaliação Vavivê")
+st.title("BELO HORIZONTE || Portal de Avaliação Vavivê")
 
 col_esq, col_dir = st.columns([1, 2])
 
