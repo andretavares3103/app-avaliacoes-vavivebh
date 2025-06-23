@@ -53,13 +53,13 @@ if link_id:
         st.header("Olá, queremos ouvir você! Avalie seu atendimento!")
         st.info(f"""
         **OS:** {dados['OS']}
-        
+
         **Cliente:** {dados['Cliente']}
-        
+
         **Serviço:** {dados['Serviço']}
-        
+
         **Data:** {dados['Data 1']}
-        
+
         **Prestador:** {dados['Prestador']}
         """)
         nota = st.radio("Avaliação (1=ruim, 5=ótimo)", [1,2,3,4,5], horizontal=True)
@@ -108,6 +108,7 @@ st.title("BELO HORIZONTE || Portal de Avaliação Vavivê")
 col_esq, col_dir = st.columns([1, 2])
 
 with col_esq:
+    # Botão de reset: só para links NÃO respondidos
     if st.button("🔄 Resetar links NÃO respondidos"):
         df_atend, df_links, df_resp = carregar_bases()
         if not df_links.empty and not df_resp.empty:
@@ -120,6 +121,7 @@ with col_esq:
             st.success("Todos os links foram resetados.")
         st.rerun()
 
+    # Upload planilha
     uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
     if uploaded:
         try:
@@ -135,6 +137,7 @@ with col_esq:
         except ValueError:
             st.error("⚠️ Aba 'Clientes' não encontrada no arquivo.")
 
+    # Geração manual de links
     st.subheader("Gerar links de avaliação (para atendimentos não cancelados)")
     df_atend, df_links, df_resp = carregar_bases()
     if not df_atend.empty and "Status Serviço" in df_atend.columns:
@@ -157,22 +160,28 @@ with col_dir:
     st.subheader("Dashboard dos Links de Avaliação")
     df_atend, df_links, df_resp = carregar_bases()
     if not df_links.empty:
+        # Dashboard: merge com atendimentos e respostas
         df_dashboard = df_links.copy()
         df_dashboard['Respondido'] = df_dashboard['link_id'].isin(df_resp['link_id'])
         df_dashboard = df_dashboard.merge(df_atend, on='OS', how='left')
         df_dashboard = df_dashboard.merge(df_resp, on='link_id', how='left')
+
+        # Gera link completo
         df_dashboard["Link Completo"] = df_dashboard["link_id"].apply(lambda x: f"{APP_URL}?link_id={x}")
 
         total_links = len(df_dashboard)
         total_respondidos = df_dashboard['Respondido'].sum()
         perc_respondidos = (total_respondidos / total_links * 100) if total_links > 0 else 0
+
         notas_validas = pd.to_numeric(df_dashboard[df_dashboard['Respondido']]['nota'], errors='coerce').dropna()
         media_nota = notas_validas.mean() if not notas_validas.empty else None
 
+        st.header("Métricas dos Links")
         col1, col2, col3 = st.columns(3)
         col1.metric("Links criados", total_links)
         col2.metric("Respondidos", total_respondidos)
         col3.metric("Pendentes", total_links - total_respondidos)
+
         st.subheader("Métricas de Resposta")
         metrica1, metrica2 = st.columns(2)
         metrica1.metric("% de respondidos", f"{perc_respondidos:.1f}%")
@@ -181,6 +190,7 @@ with col_dir:
         else:
             metrica2.metric("Média das notas (respondidos)", "N/A")
 
+        # Download Excel completo
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_dashboard.to_excel(writer, index=False, sheet_name='Links')
@@ -192,7 +202,7 @@ with col_dir:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        # Exibe a tabela final incluindo nota, observacao e link completo
+        # Exibe a tabela final com link completo e notas
         st.dataframe(
             df_dashboard.rename(columns={
                 "link_id": "LinkID",
@@ -206,12 +216,13 @@ with col_dir:
                 "observacao": "Observação"
             })[[
                 "OS", "Cliente", "Serviço", "Data", "Profissional",
-                "LinkID", "Link Completo", "Respondido", "Nota", "Observação"
+                "Nota", "Observação", "Respondido", "Link Completo"
             ]]
         )
     else:
         st.info("Nenhum link gerado ainda.")
 
+# Orientação final
 st.markdown("""
 > **Para o cliente:** Envie para ele o link gerado!  
 > O cliente vai clicar no link e já cair direto no formulário.
