@@ -166,6 +166,9 @@ with col_dir:
         df_dashboard = df_dashboard.merge(df_atend, on='OS', how='left')
         df_dashboard = df_dashboard.merge(df_resp, on='link_id', how='left')
 
+        # NOVO: adiciona coluna com o link completo após montar o df_dashboard
+        df_dashboard["Link Completo"] = df_dashboard["link_id"].apply(lambda x: f"{APP_URL}?link_id={x}")
+
         total_links = len(df_dashboard)
         total_respondidos = df_dashboard['Respondido'].sum()
         perc_respondidos = (total_respondidos / total_links * 100) if total_links > 0 else 0
@@ -199,7 +202,18 @@ with col_dir:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        st.dataframe(df_dashboard)
+        # Aqui a tabela que você pediu, incluindo "Link Completo"
+        st.dataframe(
+            df_dashboard.rename(columns={
+                "link_id": "LinkID",
+                "OS": "OS",
+                "Cliente": "Cliente",
+                "Serviço": "Serviço",
+                "Data 1": "Data",
+                "Prestador": "Profissional",
+                "Link Completo": "Link Completo"
+            })[["OS", "Cliente", "Serviço", "Data", "Profissional", "LinkID", "Link Completo", "Respondido"]]
+        )
     else:
         st.info("Nenhum link gerado ainda.")
 
