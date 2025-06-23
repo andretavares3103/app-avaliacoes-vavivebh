@@ -2,18 +2,18 @@ import pandas as pd
 import streamlit as st
 import uuid
 import os
+from io import BytesIO
 
 ATENDIMENTOS_ARQUIVO = "atendimentos.xlsx"
 AVALIACOES_ARQUIVO = "avaliacoes_links.csv"
 RESPOSTAS_ARQUIVO = "avaliacoes_respostas.csv"
 APP_URL = "https://app-avaliacoes-vavivebh.streamlit.app"
 
-st.set_page_config(page_title="Avaliação Vavivê", layout="centered")
+st.set_page_config(page_title="Avaliação Vavivê", layout="wide")
 
-# ------------------ BLOCO VISÍVEL PARA CLIENTES (FORMULÁRIO) ------------------
+# 1️⃣ FORMULÁRIO DO CLIENTE (acesso por link)
 link_id = st.query_params.get("link_id", None)
 if link_id:
-    # Funções mínimas para busca e resposta
     def buscar_dados(link_id):
         if not os.path.exists(AVALIACOES_ARQUIVO):
             st.error("Arquivo de links não encontrado!")
@@ -52,24 +52,20 @@ if link_id:
     else:
         st.header("Avalie seu atendimento")
         st.info(f"""
-**OS:** {dados['OS']}
-
-**Cliente:** {dados['Cliente']}
-
-**Serviço:** {dados['Serviço']}
-
-**Data:** {dados['Data 1']}
-
-**Prestador:** {dados['Prestador']}
+        **OS:** {dados['OS']}
+        **Cliente:** {dados['Cliente']}
+        **Serviço:** {dados['Serviço']}
+        **Data:** {dados['Data 1']}
+        **Prestador:** {dados['Prestador']}
         """)
         nota = st.radio("Avaliação (1=ruim, 5=ótimo)", [1,2,3,4,5], horizontal=True)
         obs = st.text_area("Observações (opcional)")
         if st.button("Enviar avaliação"):
             msg = registrar_avaliacao(link_id, nota, obs)
             st.success(msg)
-    st.stop()  # Impede mostrar painel para o cliente
+    st.stop()
 
-# ------------------ BLOCO VISÍVEL SÓ PARA ADMIN ------------------
+# 2️⃣ FUNÇÕES AUXILIARES
 def carregar_bases():
     if os.path.exists(ATENDIMENTOS_ARQUIVO):
         df_atend = pd.read_excel(ATENDIMENTOS_ARQUIVO)
@@ -102,112 +98,106 @@ def gerar_link_para_os(os_num):
         salvar_links(df_links)
     return link_id
 
+# 3️⃣ INTERFACE ADMIN (2 colunas)
 st.title("Portal de Avaliação Vavivê")
 
-# Botão de reset: só para links NÃO respondidos
-if st.button("🔄 Resetar links NÃO respondidos"):
+col_esq, col_dir = st.columns([1, 2])
+
+with col_esq:
+    # Botão de reset: só para links NÃO respondidos
+    if st.button("🔄 Resetar links NÃO respondidos"):
+        df_atend, df_links, df_resp = carregar_bases()
+        if not df_links.empty and not df_resp.empty:
+            responded_ids = set(df_resp['link_id'])
+            df_links = df_links[df_links['link_id'].isin(responded_ids)]
+            salvar_links(df_links)
+            st.success("Links pendentes foram resetados. Links já respondidos foram mantidos.")
+        elif not df_links.empty:
+            os.remove(AVALIACOES_ARQUIVO)
+            st.success("Todos os links foram resetados.")
+        st.rerun()
+
+    # Upload planilha
+    uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
+    if uploaded:
+        try:
+            df = pd.read_excel(uploaded, sheet_name="Clientes")
+            df.columns = [col.strip() for col in df.columns]
+            obrigatorias = ['OS', 'Status Serviço', 'Cliente', 'Serviço', 'Data 1', 'Prestador']
+            faltando = [col for col in obrigatorias if col not in df.columns]
+            if faltando:
+                st.error(f"⚠️ Colunas obrigatórias ausentes: {faltando}")
+            else:
+                df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
+                st.success("Arquivo de atendimentos atualizado.")
+        except ValueError:
+            st.error("⚠️ Aba 'Clientes' não encontrada no arquivo.")
+
+    # Geração manual de links
+    st.subheader("Gerar links de avaliação (para atendimentos não cancelados)")
     df_atend, df_links, df_resp = carregar_bases()
-    if not df_links.empty and not df_resp.empty:
-        responded_ids = set(df_resp['link_id'])
-        df_links = df_links[df_links['link_id'].isin(responded_ids)]
-        salvar_links(df_links)
-        st.success("Links pendentes foram resetados. Links já respondidos foram mantidos.")
-    elif not df_links.empty:
-        os.remove(AVALIACOES_ARQUIVO)
-        st.success("Todos os links foram resetados.")
-    st.rerun()
-
-# Upload planilha
-uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
-if uploaded:
-    try:
-        df = pd.read_excel(uploaded, sheet_name="Clientes")
-        df.columns = [col.strip() for col in df.columns]
-        obrigatorias = ['OS', 'Status Serviço', 'Cliente', 'Serviço', 'Data 1', 'Prestador']
-        faltando = [col for col in obrigatorias if col not in df.columns]
-        if faltando:
-            st.error(f"⚠️ Colunas obrigatórias ausentes: {faltando}")
+    if not df_atend.empty and "Status Serviço" in df_atend.columns:
+        concluidos = df_atend[df_atend['Status Serviço'].astype(str).str.strip().str.lower() != "cancelado"]
+        concluidos = concluidos[~concluidos['OS'].astype(str).isin(df_links['OS'].astype(str))]
+        if concluidos.empty:
+            st.info("Nenhum atendimento elegível novo para gerar link.")
         else:
-            df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
-            st.success("Arquivo de atendimentos atualizado.")
-    except ValueError:
-        st.error("⚠️ Aba 'Clientes' não encontrada no arquivo.")
+            selecao = st.multiselect(
+                "Selecione os atendimentos para gerar link:",
+                options=concluidos['OS'].astype(str),
+                format_func=lambda os_num: f"{os_num} | {concluidos[concluidos['OS'].astype(str)==os_num]['Cliente'].values[0]} | {concluidos[concluidos['OS'].astype(str)==os_num]['Serviço'].values[0]}"
+            )
+            if st.button("Gerar links"):
+                for os_num in selecao:
+                    link_id = gerar_link_para_os(os_num)
+                    st.write(f"OS: {os_num} | Link: {APP_URL}?link_id={link_id}")
 
-# Geração manual de links
-st.subheader("Gerar links de avaliação (para atendimentos não cancelados)")
-df_atend, df_links, df_resp = carregar_bases()
-if not df_atend.empty and "Status Serviço" in df_atend.columns:
-    concluidos = df_atend[df_atend['Status Serviço'].astype(str).str.strip().str.lower() != "cancelado"]
-    concluidos = concluidos[~concluidos['OS'].astype(str).isin(df_links['OS'].astype(str))]
-    if concluidos.empty:
-        st.info("Nenhum atendimento novo para gerar link.")
-    else:
-        selecao = st.multiselect(
-            "Selecione os atendimentos para gerar link:",
-            options=concluidos['OS'].astype(str),
-            format_func=lambda os_num: f"{os_num} | {concluidos[concluidos['OS'].astype(str)==os_num]['Cliente'].values[0]} | {concluidos[concluidos['OS'].astype(str)==os_num]['Serviço'].values[0]}"
+with col_dir:
+    st.subheader("Dashboard dos Links de Avaliação")
+    df_atend, df_links, df_resp = carregar_bases()
+    if not df_links.empty:
+        # Dashboard: merge com atendimentos e respostas
+        df_dashboard = df_links.copy()
+        df_dashboard['Respondido'] = df_dashboard['link_id'].isin(df_resp['link_id'])
+        df_dashboard = df_dashboard.merge(df_atend, on='OS', how='left')
+        df_dashboard = df_dashboard.merge(df_resp, on='link_id', how='left')
+
+        total_links = len(df_dashboard)
+        total_respondidos = df_dashboard['Respondido'].sum()
+        perc_respondidos = (total_respondidos / total_links * 100) if total_links > 0 else 0
+
+        notas_validas = pd.to_numeric(df_dashboard[df_dashboard['Respondido']]['nota'], errors='coerce').dropna()
+        media_nota = notas_validas.mean() if not notas_validas.empty else None
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Links criados", total_links)
+        col2.metric("Respondidos", total_respondidos)
+        col3.metric("Pendentes", total_links - total_respondidos)
+
+        # NOVO: métricas extras em destaque
+        st.subheader("Métricas de Resposta")
+        metrica1, metrica2 = st.columns(2)
+        metrica1.metric("% de respondidos", f"{perc_respondidos:.1f}%")
+        if media_nota is not None:
+            metrica2.metric("Média das notas (respondidos)", f"{media_nota:.2f}")
+        else:
+            metrica2.metric("Média das notas (respondidos)", "N/A")
+
+        # Download Excel completo
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_dashboard.to_excel(writer, index=False, sheet_name='Links')
+        xlsx_data = output.getvalue()
+        st.download_button(
+            label="📥 Baixar tabela Excel completa",
+            data=xlsx_data,
+            file_name="links_avaliacao_completo.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        if st.button("Gerar links"):
-            for os_num in selecao:
-                link_id = gerar_link_para_os(os_num)
-                st.write(f"OS: {os_num} | Link: {APP_URL}?link_id={link_id}")
 
-# DASHBOARD DE LINKS
-st.header("Dashboard dos Links de Avaliação")
-df_atend, df_links, df_resp = carregar_bases()
-if not df_links.empty:
-    df_dashboard = df_links.copy()
-    df_dashboard['Respondido'] = df_dashboard['link_id'].isin(df_resp['link_id'])
-    df_dashboard = df_dashboard.merge(df_atend, on='OS', how='left')
-    df_dashboard["Link Completo"] = df_dashboard["link_id"].apply(lambda x: f"{APP_URL}?link_id={x}")
-
-    # Métricas
-    total = len(df_dashboard)
-    respondidos = df_dashboard['Respondido'].sum()
-    pendentes = (~df_dashboard['Respondido']).sum()
-    perc_respondidos = (respondidos / total * 100) if total > 0 else 0
-
-    # Média das notas (apenas respondidos)
-    notas = pd.merge(df_dashboard[df_dashboard['Respondido']], df_resp[['link_id', 'nota']], on='link_id', how='left')
-    if not notas.empty:
-        media_nota = notas['nota'].astype(float).mean()
+        st.dataframe(df_dashboard)
     else:
-        media_nota = 0
-
-    # Mostra métricas com header
-    st.subheader("Resumo dos Links de Avaliação")
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Links criados", total)
-    col2.metric("Respondidos", respondidos)
-    col3.metric("Pendentes", pendentes)
-    col4.metric("% Respondidos", f"{perc_respondidos:.1f}%")
-    col5.metric("Média das notas", f"{media_nota:.2f}")
-
-    # Download Excel
-    st.download_button(
-        "📄 Baixar tabela Excel completa",
-        data=df_dashboard.to_excel(index=False, engine="openpyxl"),
-        file_name="links_avaliacoes_completo.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    # Mostra a tabela completa, incluindo todos os campos do formulário
-    st.dataframe(
-        df_dashboard.rename(columns={
-            "link_id": "LinkID",
-            "OS": "OS",
-            "Cliente": "Cliente",
-            "Serviço": "Serviço",
-            "Data 1": "Data",
-            "Prestador": "Profissional",
-            "Link Completo": "Link Completo"
-        })[
-            ["OS", "Cliente", "Serviço", "Data", "Profissional", "LinkID", "Link Completo", "Respondido"] +
-            [col for col in df_atend.columns if col not in ["OS", "Cliente", "Serviço", "Data 1", "Prestador"]]
-        ]
-    )
-else:
-    st.info("Nenhum link gerado ainda.")
+        st.info("Nenhum link gerado ainda.")
 
 # Orientação final
 st.markdown("""
