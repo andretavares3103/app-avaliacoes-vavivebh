@@ -1,4 +1,4 @@
-import pandas as pd 
+import pandas as pd
 import streamlit as st
 import uuid
 import os
@@ -160,6 +160,7 @@ with col_dir:
     st.subheader("Dashboard dos Links de Avaliação")
     df_atend, df_links, df_resp = carregar_bases()
     if not df_links.empty:
+        # Dashboard: merge com atendimentos e respostas
         df_dashboard = df_links.copy()
         df_dashboard['Respondido'] = df_dashboard['link_id'].isin(df_resp['link_id'])
         df_dashboard = df_dashboard.merge(df_atend, on='OS', how='left')
@@ -168,33 +169,42 @@ with col_dir:
         # Gera link completo
         df_dashboard["Link Completo"] = df_dashboard["link_id"].apply(lambda x: f"{APP_URL}?link_id={x}")
 
-        # === FILTROS ===
-        st.markdown("#### Filtros")
-        # Data
-        min_data = pd.to_datetime(df_dashboard["Data 1"], errors="coerce").min()
-        max_data = pd.to_datetime(df_dashboard["Data 1"], errors="coerce").max()
-        data_ini, data_fim = st.date_input(
-            "Filtrar por data:",
-            [min_data, max_data] if not pd.isnull(min_data) and not pd.isnull(max_data) else [None, None],
-            format="YYYY-MM-DD"
+        # --------------------- FILTROS! ---------------------
+        # Filtro de datas
+        df_dashboard['Data 1'] = pd.to_datetime(df_dashboard['Data 1'], errors='coerce')
+        data_min = df_dashboard['Data 1'].min()
+        data_max = df_dashboard['Data 1'].max()
+        data_inicial, data_final = st.date_input(
+            "Filtrar por Data (inicial/final)",
+            value=(data_min, data_max),
+            min_value=data_min, max_value=data_max,
+            key="data_filter"
+        ) if pd.notnull(data_min) and pd.notnull(data_max) else (None, None)
+
+        # Filtro de nome do cliente
+        nomes_unicos = sorted(df_dashboard["Cliente"].dropna().unique())
+        cliente_filtrado = st.selectbox(
+            "Filtrar por Cliente",
+            options=["(Todos)"] + nomes_unicos,
+            key="cliente_filter"
         )
-        # Cliente
-        cliente_opcao = st.text_input("Filtrar por cliente (nome contém):", "")
 
-        mask = pd.Series([True] * len(df_dashboard))
-        if data_ini and data_fim:
-            datas = pd.to_datetime(df_dashboard["Data 1"], errors="coerce")
-            mask = mask & (datas >= pd.to_datetime(data_ini)) & (datas <= pd.to_datetime(data_fim))
-        if cliente_opcao.strip():
-            mask = mask & df_dashboard["Cliente"].str.contains(cliente_opcao, case=False, na=False)
-        df_dashboard_filt = df_dashboard[mask].copy()
+        # Aplica os filtros
+        df_filtrado = df_dashboard.copy()
+        if data_inicial and data_final:
+            df_filtrado = df_filtrado[
+                (df_filtrado["Data 1"] >= pd.to_datetime(data_inicial)) &
+                (df_filtrado["Data 1"] <= pd.to_datetime(data_final))
+            ]
+        if cliente_filtrado != "(Todos)":
+            df_filtrado = df_filtrado[df_filtrado["Cliente"] == cliente_filtrado]
+        # ----------------------------------------------------
 
-        # === MÉTRICAS E TABELA ===
-        total_links = len(df_dashboard_filt)
-        total_respondidos = df_dashboard_filt['Respondido'].sum()
+        total_links = len(df_filtrado)
+        total_respondidos = df_filtrado['Respondido'].sum()
         perc_respondidos = (total_respondidos / total_links * 100) if total_links > 0 else 0
 
-        notas_validas = pd.to_numeric(df_dashboard_filt[df_dashboard_filt['Respondido']]['nota'], errors='coerce').dropna()
+        notas_validas = pd.to_numeric(df_filtrado[df_filtrado['Respondido']]['nota'], errors='coerce').dropna()
         media_nota = notas_validas.mean() if not notas_validas.empty else None
 
         st.header("Métricas dos Links")
@@ -206,12 +216,15 @@ with col_dir:
         st.subheader("Métricas de Resposta")
         metrica1, metrica2 = st.columns(2)
         metrica1.metric("% de respondidos", f"{perc_respondidos:.1f}%")
-        metrica2.metric("Média das notas (respondidos)", f"{media_nota:.2f}" if media_nota is not None else "N/A")
+        if media_nota is not None:
+            metrica2.metric("Média das notas (respondidos)", f"{media_nota:.2f}")
+        else:
+            metrica2.metric("Média das notas (respondidos)", "N/A")
 
         # Download Excel completo
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_dashboard_filt.to_excel(writer, index=False, sheet_name='Links')
+            df_filtrado.to_excel(writer, index=False, sheet_name='Links')
         xlsx_data = output.getvalue()
         st.download_button(
             label="📥 Baixar tabela Excel completa",
@@ -222,7 +235,7 @@ with col_dir:
 
         # Exibe a tabela final com link completo e notas
         st.dataframe(
-            df_dashboard_filt.rename(columns={
+            df_filtrado.rename(columns={
                 "link_id": "LinkID",
                 "OS": "OS",
                 "Cliente": "Cliente",
