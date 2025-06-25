@@ -698,6 +698,11 @@ def pipeline(file_path, output_dir):
 
     df_matriz_rotas = pd.DataFrame(matriz_resultado_corrigida)
 
+    # Adiciona o link de validação ao final da Mensagem Padrão para todos os atendimentos
+    link_validacao = "\n\n👉 [Clique aqui para validar seu aceite](https://sualandingpage.com/aceite)\n"
+    df_matriz_rotas["Mensagem Padrão"] = df_matriz_rotas["Mensagem Padrão"].astype(str) + link_validacao
+
+
     for i in range(1, 21):
         if f"Classificação da Profissional {i}" not in df_matriz_rotas.columns:
             df_matriz_rotas[f"Classificação da Profissional {i}"] = pd.NA
