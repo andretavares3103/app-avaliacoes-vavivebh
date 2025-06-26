@@ -170,20 +170,18 @@ with col_dir:
         df_dashboard["Link Completo"] = df_dashboard["link_id"].apply(lambda x: f"{APP_URL}?link_id={x}")
 
         # --------------------- FILTROS! ---------------------
+       # NOVO FILTRO DE DATA - LISTA/MULTISELECT
         df_dashboard['Data 1'] = pd.to_datetime(df_dashboard['Data 1'], errors='coerce')
-        data_min = df_dashboard['Data 1'].min()
-        data_max = df_dashboard['Data 1'].max()
+        datas_unicas = df_dashboard['Data 1'].dropna().dt.date.unique()
+        datas_unicas = sorted(datas_unicas)
+        
+        data_selecionada = st.multiselect(
+            "Filtrar por Data (escolha uma ou mais datas)",
+            options=["(Todas)"] + [d.strftime("%Y-%m-%d") for d in datas_unicas],
+            default="(Todas)",
+            key="data_filter"
+        )
 
-        todos_datas = st.checkbox("Mostrar todos os períodos", value=True)
-        if not todos_datas and pd.notnull(data_min) and pd.notnull(data_max):
-            data_inicial, data_final = st.date_input(
-                "Filtrar por Data (inicial/final)",
-                value=(data_min, data_max),
-                min_value=data_min, max_value=data_max,
-                key="data_filter"
-            )
-        else:
-            data_inicial, data_final = data_min, data_max
 
         nomes_unicos = sorted(df_dashboard["Cliente"].dropna().unique())
         cliente_filtrado = st.selectbox(
@@ -194,11 +192,12 @@ with col_dir:
 
         # Aplica os filtros
         df_filtrado = df_dashboard.copy()
-        if not todos_datas and data_inicial and data_final:
-            df_filtrado = df_filtrado[
-                (df_filtrado["Data 1"] >= pd.to_datetime(data_inicial)) &
-                (df_filtrado["Data 1"] <= pd.to_datetime(data_final))
-            ]
+        # Se não for "(Todas)", filtra pelas datas selecionadas
+        if "(Todas)" not in data_selecionada:
+            datas_filtrar = [pd.to_datetime(d).date() for d in data_selecionada]
+            df_filtrado = df_filtrado[df_filtrado['Data 1'].dt.date.isin(datas_filtrar)]
+
+
         if cliente_filtrado != "(Todos)":
             df_filtrado = df_filtrado[df_filtrado["Cliente"] == cliente_filtrado]
         # ----------------------------------------------------
