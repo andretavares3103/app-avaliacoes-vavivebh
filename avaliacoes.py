@@ -170,18 +170,21 @@ with col_dir:
         df_dashboard["Link Completo"] = df_dashboard["link_id"].apply(lambda x: f"{APP_URL}?link_id={x}")
 
         # --------------------- FILTROS! ---------------------
-        # Filtro de datas
         df_dashboard['Data 1'] = pd.to_datetime(df_dashboard['Data 1'], errors='coerce')
         data_min = df_dashboard['Data 1'].min()
         data_max = df_dashboard['Data 1'].max()
-        data_inicial, data_final = st.date_input(
-            "Filtrar por Data (inicial/final)",
-            value=(data_min, data_max),
-            min_value=data_min, max_value=data_max,
-            key="data_filter"
-        ) if pd.notnull(data_min) and pd.notnull(data_max) else (None, None)
 
-        # Filtro de nome do cliente
+        todos_datas = st.checkbox("Mostrar todos os períodos", value=True)
+        if not todos_datas and pd.notnull(data_min) and pd.notnull(data_max):
+            data_inicial, data_final = st.date_input(
+                "Filtrar por Data (inicial/final)",
+                value=(data_min, data_max),
+                min_value=data_min, max_value=data_max,
+                key="data_filter"
+            )
+        else:
+            data_inicial, data_final = data_min, data_max
+
         nomes_unicos = sorted(df_dashboard["Cliente"].dropna().unique())
         cliente_filtrado = st.selectbox(
             "Filtrar por Cliente",
@@ -191,7 +194,7 @@ with col_dir:
 
         # Aplica os filtros
         df_filtrado = df_dashboard.copy()
-        if data_inicial and data_final:
+        if not todos_datas and data_inicial and data_final:
             df_filtrado = df_filtrado[
                 (df_filtrado["Data 1"] >= pd.to_datetime(data_inicial)) &
                 (df_filtrado["Data 1"] <= pd.to_datetime(data_final))
