@@ -16,7 +16,7 @@ def hash_senha(senha):
     return hashlib.sha256(senha.encode()).hexdigest()
 
 ADMIN_USER = "admin"
-ADMIN_HASH = hash_senha("SuaSenhaForteAqui")  # Troque por sua senha forte
+ADMIN_HASH = hash_senha("vvv")  # Troque por sua senha forte
 
 def autenticar(usuario, senha):
     return usuario == ADMIN_USER and hash_senha(senha) == ADMIN_HASH
