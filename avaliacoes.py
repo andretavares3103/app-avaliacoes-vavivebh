@@ -1,262 +1,166 @@
-import pandas as pd
 import streamlit as st
-import uuid
+import pandas as pd
+import sqlite3
 import os
-from io import BytesIO
+import uuid
+import hashlib
+from datetime import datetime
 
-ATENDIMENTOS_ARQUIVO = "atendimentos.xlsx"
-AVALIACOES_ARQUIVO = "avaliacoes_links.csv"
-RESPOSTAS_ARQUIVO = "avaliacoes_respostas.csv"
-APP_URL = "https://app-avaliacoes-vavivebh.streamlit.app"
+# ---------- CONFIG ---------
+UPLOADS_DIR = "uploads"
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+DB_PATH = "cadastros.db"
 
-st.set_page_config(page_title="Avaliação Vavivê BH", layout="wide")
+# ---------- AUTENTICAÇÃO ----------
+def hash_senha(senha):
+    return hashlib.sha256(senha.encode()).hexdigest()
 
-# 1️⃣ FORMULÁRIO DO CLIENTE (acesso por link)
-link_id = st.query_params.get("link_id", None)
-if link_id:
-    def buscar_dados(link_id):
-        if not os.path.exists(AVALIACOES_ARQUIVO):
-            st.error("Arquivo de links não encontrado!")
-            return None
-        df_links = pd.read_csv(AVALIACOES_ARQUIVO)
-        df_atend = pd.read_excel(ATENDIMENTOS_ARQUIVO)
-        df_atend.columns = [col.strip() for col in df_atend.columns]
-        registro = df_links[df_links['link_id'] == link_id]
-        if registro.empty:
-            return None
-        os_num = registro.iloc[0]['OS']
-        dados = df_atend[df_atend['OS'].astype(str) == str(os_num)]
-        if dados.empty:
-            return None
-        row = dados.iloc[0]
-        return {
-            "OS": row['OS'],
-            "Cliente": row['Cliente'],
-            "Serviço": row['Serviço'],
-            "Data 1": row['Data 1'],
-            "Prestador": row['Prestador']
-        }
+ADMIN_USER = "admin"
+ADMIN_HASH = hash_senha("SuaSenhaForteAqui")  # Troque por sua senha forte
 
-    def registrar_avaliacao(link_id, nota, observacao):
-        df_resp = pd.read_csv(RESPOSTAS_ARQUIVO) if os.path.exists(RESPOSTAS_ARQUIVO) else pd.DataFrame(columns=['link_id', 'nota', 'observacao'])
-        if link_id in df_resp['link_id'].values:
-            return "Avaliação já recebida para esse atendimento."
-        nova = pd.DataFrame([{'link_id': link_id, 'nota': nota, 'observacao': observacao}])
-        df_resp = pd.concat([df_resp, nova], ignore_index=True)
-        df_resp.to_csv(RESPOSTAS_ARQUIVO, index=False)
-        return "Obrigado pela sua avaliação!"
+def autenticar(usuario, senha):
+    return usuario == ADMIN_USER and hash_senha(senha) == ADMIN_HASH
 
-    dados = buscar_dados(link_id)
-    if not dados:
-        st.error("Link inválido ou não encontrado.")
-    else:
-        st.header("Olá, queremos ouvir você! Avalie seu atendimento!")
-        st.info(f"""
-        **OS:** {dados['OS']}
+# ---------- BANCO DE DADOS ----------
+def conectar():
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
 
-        **Cliente:** {dados['Cliente']}
+def criar_tabela():
+    with conectar() as conn:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS profissionais (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT, cpf TEXT, rg TEXT, celular TEXT, email TEXT, data_nascimento TEXT,
+            cep TEXT, rua TEXT, numero TEXT, bairro TEXT, cidade TEXT, estado TEXT,
+            arquivos TEXT, data_cadastro TEXT
+        )""")
 
-        **Serviço:** {dados['Serviço']}
+def inserir_profissional(dados, links_arquivos):
+    with conectar() as conn:
+        conn.execute("""
+        INSERT INTO profissionais
+        (nome, cpf, rg, celular, email, data_nascimento, cep, rua, numero, bairro, cidade, estado, arquivos, data_cadastro)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (*dados, ";".join(links_arquivos), datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
-        **Data:** {dados['Data 1']}
+def listar_profissionais():
+    with conectar() as conn:
+        return pd.read_sql("SELECT * FROM profissionais", conn)
 
-        **Prestador:** {dados['Prestador']}
-        """)
-        nota = st.radio("Avaliação (1=ruim, 5=ótimo)", [1,2,3,4,5], horizontal=True)
-        obs = st.text_area("Observações (opcional)")
-        if st.button("Enviar avaliação"):
-            msg = registrar_avaliacao(link_id, nota, obs)
-            st.success(msg)
-    st.stop()
+criar_tabela()
 
-# 2️⃣ FUNÇÕES AUXILIARES
-def carregar_bases():
-    if os.path.exists(ATENDIMENTOS_ARQUIVO):
-        df_atend = pd.read_excel(ATENDIMENTOS_ARQUIVO)
-        df_atend.columns = [col.strip() for col in df_atend.columns]
-    else:
-        df_atend = pd.DataFrame()
-    if os.path.exists(AVALIACOES_ARQUIVO):
-        df_links = pd.read_csv(AVALIACOES_ARQUIVO)
-    else:
-        df_links = pd.DataFrame(columns=['OS', 'link_id'])
-    if os.path.exists(RESPOSTAS_ARQUIVO):
-        df_resp = pd.read_csv(RESPOSTAS_ARQUIVO)
-    else:
-        df_resp = pd.DataFrame(columns=['link_id', 'nota', 'observacao'])
-    return df_atend, df_links, df_resp
+# ---------- INTERFACE ----------
+st.set_page_config("Cadastro de Profissional", layout="wide")
+tabs = st.tabs(["📋 Cadastro de Profissional", "🔑 Admin (Visualizar Cadastros)"])
 
-def salvar_links(df_links):
-    df_links.to_csv(AVALIACOES_ARQUIVO, index=False)
+# ========== TELA 1: Cadastro ==========
+with tabs[0]:
+    st.header("Cadastro de Profissional")
+    with st.form("form_cadastro"):
+        col1, col2 = st.columns(2)
+        with col1:
+            nome = st.text_input("Nome *")
+            cpf = st.text_input("CPF *", max_chars=14)
+            rg = st.text_input("RG")
+            celular = st.text_input("Celular *", max_chars=15)
+            email = st.text_input("E-mail *")
+            data_nascimento = st.date_input("Data de nascimento *")
+        with col2:
+            cep = st.text_input("CEP")
+            rua = st.text_input("Rua")
+            numero = st.text_input("Número")
+            bairro = st.text_input("Bairro")
+            cidade = st.text_input("Cidade")
+            estado = st.text_input("Estado")
+        arquivos = st.file_uploader("Upload de documentos (PDF/JPG)", accept_multiple_files=True)
+        enviado = st.form_submit_button("Finalizar Cadastro")
+    if enviado:
+        obrigatorios = [nome, cpf, celular, email, data_nascimento]
+        if any([not campo for campo in obrigatorios]):
+            st.error("Preencha todos os campos obrigatórios.")
+        else:
+            links_arquivos = []
+            if arquivos:
+                for arq in arquivos:
+                    arq_name = f"{uuid.uuid4()}_{arq.name}"
+                    arq_path = os.path.join(UPLOADS_DIR, arq_name)
+                    with open(arq_path, "wb") as f:
+                        f.write(arq.read())
+                    links_arquivos.append(arq_path)
+            dados = [nome, cpf, rg, celular, email, str(data_nascimento), cep, rua, numero, bairro, cidade, estado]
+            inserir_profissional(dados, links_arquivos)
+            st.success("Cadastro realizado com sucesso!")
 
-def salvar_resposta(df_resp):
-    df_resp.to_csv(RESPOSTAS_ARQUIVO, index=False)
+# ========== TELA 2: Admin ==========
+with tabs[1]:
+    st.header("Administração de Cadastros")
+    if "admin_autenticado" not in st.session_state:
+        st.session_state.admin_autenticado = False
 
-def gerar_link_para_os(os_num):
-    df_atend, df_links, _ = carregar_bases()
-    if os_num in df_links['OS'].astype(str).values:
-        link_id = df_links[df_links['OS'].astype(str) == str(os_num)]['link_id'].values[0]
-    else:
-        link_id = str(uuid.uuid4())
-        df_links = pd.concat([df_links, pd.DataFrame([{'OS': os_num, 'link_id': link_id}])], ignore_index=True)
-        salvar_links(df_links)
-    return link_id
-
-# 3️⃣ INTERFACE ADMIN (2 colunas)
-st.title("BELO HORIZONTE || Portal de Avaliação Vavivê")
-
-col_esq, col_dir = st.columns([1, 2])
-
-with col_esq:
-    # Botão de reset: só para links NÃO respondidos
-    if st.button("🔄 Resetar links NÃO respondidos"):
-        df_atend, df_links, df_resp = carregar_bases()
-        if not df_links.empty and not df_resp.empty:
-            responded_ids = set(df_resp['link_id'])
-            df_links = df_links[df_links['link_id'].isin(responded_ids)]
-            salvar_links(df_links)
-            st.success("Links pendentes foram resetados. Links já respondidos foram mantidos.")
-        elif not df_links.empty:
-            os.remove(AVALIACOES_ARQUIVO)
-            st.success("Todos os links foram resetados.")
-        st.rerun()
-
-    # Upload planilha
-    uploaded = st.file_uploader("Faça upload da planilha de atendimentos (.xlsx)", type="xlsx")
-    if uploaded:
-        try:
-            df = pd.read_excel(uploaded, sheet_name="Clientes")
-            df.columns = [col.strip() for col in df.columns]
-            obrigatorias = ['OS', 'Status Serviço', 'Cliente', 'Serviço', 'Data 1', 'Prestador']
-            faltando = [col for col in obrigatorias if col not in df.columns]
-            if faltando:
-                st.error(f"⚠️ Colunas obrigatórias ausentes: {faltando}")
+    # BLOCO DE LOGIN
+    if not st.session_state.admin_autenticado:
+        with st.form("form_login"):
+            usuario = st.text_input("Usuário")
+            senha = st.text_input("Senha", type="password")
+            login = st.form_submit_button("Entrar")
+        if login:
+            if autenticar(usuario, senha):
+                st.session_state.admin_autenticado = True
+                st.experimental_rerun()  # Recarrega e já exibe a área admin
             else:
-                df.to_excel(ATENDIMENTOS_ARQUIVO, index=False)
-                st.success("Arquivo de atendimentos atualizado.")
-        except ValueError:
-            st.error("⚠️ Aba 'Clientes' não encontrada no arquivo.")
+                st.error("Usuário ou senha incorretos.")
+        st.stop()
 
-    # Geração manual de links
-    st.subheader("Gerar links de avaliação (para atendimentos não cancelados)")
-    df_atend, df_links, df_resp = carregar_bases()
-    if not df_atend.empty and "Status Serviço" in df_atend.columns:
-        concluidos = df_atend[df_atend['Status Serviço'].astype(str).str.strip().str.lower() != "cancelado"]
-        concluidos = concluidos[~concluidos['OS'].astype(str).isin(df_links['OS'].astype(str))]
-        if concluidos.empty:
-            st.info("Nenhum atendimento elegível novo para gerar link.")
-        else:
-            selecao = st.multiselect(
-                "Selecione os atendimentos para gerar link:",
-                options=concluidos['OS'].astype(str),
-                format_func=lambda os_num: f"{os_num} | {concluidos[concluidos['OS'].astype(str)==os_num]['Cliente'].values[0]} | {concluidos[concluidos['OS'].astype(str)==os_num]['Serviço'].values[0]}"
-            )
-            if st.button("Gerar links"):
-                for os_num in selecao:
-                    link_id = gerar_link_para_os(os_num)
-                    st.write(f"OS: {os_num} | Link: {APP_URL}?link_id={link_id}")
+    # BLOCO ADMIN (só aparece após login)
+    st.success(f"Bem-vindo, {ADMIN_USER}!")
 
-with col_dir:
-    st.subheader("Dashboard dos Links de Avaliação")
-    df_atend, df_links, df_resp = carregar_bases()
-    if not df_links.empty:
-        # Dashboard: merge com atendimentos e respostas
-        df_dashboard = df_links.copy()
-        df_dashboard['Respondido'] = df_dashboard['link_id'].isin(df_resp['link_id'])
-        df_dashboard = df_dashboard.merge(df_atend, on='OS', how='left')
-        df_dashboard = df_dashboard.merge(df_resp, on='link_id', how='left')
+    df = listar_profissionais()
+    if df.empty:
+        st.info("Nenhum cadastro realizado ainda.")
+        st.stop()
 
-        # Gera link completo
-        df_dashboard["Link Completo"] = df_dashboard["link_id"].apply(lambda x: f"{APP_URL}?link_id={x}")
+    # FILTROS
+    colf1, colf2 = st.columns([2, 3])
 
-        # --------------------- FILTROS! ---------------------
-       # NOVO FILTRO DE DATA - LISTA/MULTISELECT
-        df_dashboard['Data 1'] = pd.to_datetime(df_dashboard['Data 1'], errors='coerce')
-        datas_unicas = df_dashboard['Data 1'].dropna().dt.date.unique()
-        datas_unicas = sorted(datas_unicas)
-        
-        data_selecionada = st.multiselect(
-            "Filtrar por Data (escolha uma ou mais datas)",
-            options=["(Todas)"] + [d.strftime("%Y-%m-%d") for d in datas_unicas],
-            default="(Todas)",
-            key="data_filter"
+    with colf1:
+        busca_nome = st.text_input("Buscar por nome").strip().lower()
+    with colf2:
+        st.write("Filtrar por data de cadastro:")
+        min_date = df["data_cadastro"].min()
+        max_date = df["data_cadastro"].max()
+        if pd.isnull(min_date): min_date = datetime.today().strftime("%Y-%m-%d")
+        if pd.isnull(max_date): max_date = datetime.today().strftime("%Y-%m-%d")
+        data_inicio, data_fim = st.date_input(
+            "Período:",
+            [pd.to_datetime(min_date).date(), pd.to_datetime(max_date).date()]
         )
 
+    df_filtro = df.copy()
+    if busca_nome:
+        df_filtro = df_filtro[df_filtro["nome"].str.lower().str.contains(busca_nome)]
+    df_filtro = df_filtro[
+        (pd.to_datetime(df_filtro["data_cadastro"]) >= pd.to_datetime(data_inicio)) &
+        (pd.to_datetime(df_filtro["data_cadastro"]) <= pd.to_datetime(data_fim))
+    ]
+    st.markdown(f"**Total encontrado:** {len(df_filtro)} cadastro(s)")
 
-        nomes_unicos = sorted(df_dashboard["Cliente"].dropna().unique())
-        cliente_filtrado = st.selectbox(
-            "Filtrar por Cliente",
-            options=["(Todos)"] + nomes_unicos,
-            key="cliente_filter"
-        )
+    st.dataframe(df_filtro.drop(columns=["id"]), hide_index=True, use_container_width=True)
 
-        # Aplica os filtros
-        df_filtrado = df_dashboard.copy()
-        # Se não for "(Todas)", filtra pelas datas selecionadas
-        if "(Todas)" not in data_selecionada:
-            datas_filtrar = [pd.to_datetime(d).date() for d in data_selecionada]
-            df_filtrado = df_filtrado[df_filtrado['Data 1'].dt.date.isin(datas_filtrar)]
-
-
-        if cliente_filtrado != "(Todos)":
-            df_filtrado = df_filtrado[df_filtrado["Cliente"] == cliente_filtrado]
-        # ----------------------------------------------------
-
-        total_links = len(df_filtrado)
-        total_respondidos = df_filtrado['Respondido'].sum()
-        perc_respondidos = (total_respondidos / total_links * 100) if total_links > 0 else 0
-
-        notas_validas = pd.to_numeric(df_filtrado[df_filtrado['Respondido']]['nota'], errors='coerce').dropna()
-        media_nota = notas_validas.mean() if not notas_validas.empty else None
-
-        st.header("Métricas dos Links")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Links criados", total_links)
-        col2.metric("Respondidos", total_respondidos)
-        col3.metric("Pendentes", total_links - total_respondidos)
-
-        st.subheader("Métricas de Resposta")
-        metrica1, metrica2 = st.columns(2)
-        metrica1.metric("% de respondidos", f"{perc_respondidos:.1f}%")
-        if media_nota is not None:
-            metrica2.metric("Média das notas (respondidos)", f"{media_nota:.2f}")
-        else:
-            metrica2.metric("Média das notas (respondidos)", "N/A")
-
-        # Download Excel completo
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_filtrado.to_excel(writer, index=False, sheet_name='Links')
-        xlsx_data = output.getvalue()
-        st.download_button(
-            label="📥 Baixar tabela Excel completa",
-            data=xlsx_data,
-            file_name="links_avaliacao_completo.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-        # Exibe a tabela final com link completo e notas
-        st.dataframe(
-            df_filtrado.rename(columns={
-                "link_id": "LinkID",
-                "OS": "OS",
-                "Cliente": "Cliente",
-                "Serviço": "Serviço",
-                "Data 1": "Data",
-                "Prestador": "Profissional",
-                "Link Completo": "Link Completo",
-                "nota": "Nota",
-                "observacao": "Observação"
-            })[[
-                "OS", "Cliente", "Serviço", "Data", "Profissional",
-                "Nota", "Observação", "Respondido", "Link Completo"
-            ]]
-        )
-    else:
-        st.info("Nenhum link gerado ainda.")
-
-# Orientação final
-st.markdown("""
-> **Para o cliente:** Envie para ele o link gerado!  
-> O cliente vai clicar no link e já cair direto no formulário.
-""")
+    st.subheader("Download de Documentos (anexos)")
+    for idx, row in df_filtro.iterrows():
+        if row["arquivos"]:
+            for arq_path in row["arquivos"].split(";"):
+                arq_path = arq_path.strip()
+                if arq_path and os.path.exists(arq_path):
+                    with open(arq_path, "rb") as f:
+                        st.download_button(
+                            f"Baixar: {os.path.basename(arq_path)} (Profissional: {row['nome']})",
+                            data=f.read(),
+                            file_name=os.path.basename(arq_path),
+                            key=f"{arq_path}_{idx}"
+                        )
+    st.subheader("Exportar Cadastros Filtrados")
+    csv = df_filtro.to_csv(index=False).encode("utf-8")
+    st.download_button("Exportar para CSV", data=csv, file_name="cadastros_filtrados.csv")
+    excel = df_filtro.to_excel(index=False, engine='openpyxl')
+    st.download_button("Exportar para Excel", data=excel, file_name="cadastros_filtrados.xlsx")
