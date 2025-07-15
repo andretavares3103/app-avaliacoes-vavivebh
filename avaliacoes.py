@@ -99,23 +99,24 @@ with tabs[1]:
     if "admin_autenticado" not in st.session_state:
         st.session_state.admin_autenticado = False
 
-    # BLOCO DE LOGIN
     if not st.session_state.admin_autenticado:
-        with st.form("form_login"):
-            usuario = st.text_input("Usuário")
-            senha = st.text_input("Senha", type="password")
-            login = st.form_submit_button("Entrar")
+        # Use uma chave única para o formulário
+        with st.form(key="login_form"):
+            usuario = st.text_input("Usuário", key="usuario_login")
+            senha = st.text_input("Senha", type="password", key="senha_login")
+            login = st.form_submit_button("Entrar", type="primary")
         if login:
             if autenticar(usuario, senha):
                 st.session_state.admin_autenticado = True
                 st.experimental_rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
-        st.stop()  # Para aqui se não está autenticado
+        st.stop()  # NADA do painel aparece aqui!
 
-    # SE ESTÁ AUTENTICADO, mostra o painel:
+    # Se está autenticado, painel aparece de imediato:
     st.success(f"Bem-vindo, {ADMIN_USER}!")
-    # ... painel admin, filtros, etc ...
+    # ... painel admin aqui ...
+
 
 
     df = listar_profissionais()
