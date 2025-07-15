@@ -108,13 +108,15 @@ with tabs[1]:
         if login:
             if autenticar(usuario, senha):
                 st.session_state.admin_autenticado = True
-                st.experimental_rerun()  # Recarrega e já exibe a área admin
+                st.experimental_rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
-        st.stop()
+        st.stop()  # Para aqui se não está autenticado
 
-    # BLOCO ADMIN (só aparece após login)
+    # SE ESTÁ AUTENTICADO, mostra o painel:
     st.success(f"Bem-vindo, {ADMIN_USER}!")
+    # ... painel admin, filtros, etc ...
+
 
     df = listar_profissionais()
     if df.empty:
