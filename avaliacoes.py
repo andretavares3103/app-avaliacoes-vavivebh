@@ -5,6 +5,8 @@ import os
 import uuid
 import hashlib
 from datetime import datetime
+import io
+
 
 # ---------- CONFIG ---------
 UPLOADS_DIR = "uploads"
@@ -162,5 +164,8 @@ with tabs[1]:
     st.subheader("Exportar Cadastros Filtrados")
     csv = df_filtro.to_csv(index=False).encode("utf-8")
     st.download_button("Exportar para CSV", data=csv, file_name="cadastros_filtrados.csv")
-    excel = df_filtro.to_excel(index=False, engine='openpyxl')
+    excel_buffer = io.BytesIO()
+    df_filtro.to_excel(excel_buffer, index=False, engine='openpyxl')
+    excel_buffer.seek(0)
+    st.download_button("Exportar para Excel", data=excel_buffer, file_name="cadastros_filtrados.xlsx")
     st.download_button("Exportar para Excel", data=excel, file_name="cadastros_filtrados.xlsx")
