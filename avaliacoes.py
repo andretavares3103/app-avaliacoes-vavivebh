@@ -163,12 +163,6 @@ with tabs[1]:
                             file_name=os.path.basename(arq_path),
                             key=f"{arq_path}_{idx}"
                         )
-   # CSV
-csv = df_filtro.to_csv(index=False).encode("utf-8")
-st.download_button("Exportar para CSV", data=csv, file_name="cadastros_filtrados.csv")
-
-# EXCEL
-import io
 excel_buffer = io.BytesIO()
 df_filtro.to_excel(excel_buffer, index=False, engine='openpyxl')
 excel_buffer.seek(0)
