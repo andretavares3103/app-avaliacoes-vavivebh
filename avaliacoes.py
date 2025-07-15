@@ -152,23 +152,31 @@ with tabs[1]:
     st.dataframe(df_filtro.drop(columns=["id"]), hide_index=True, use_container_width=True)
 
     st.subheader("Download de Documentos (anexos)")
-    for idx, row in df_filtro.iterrows():
-        if row["arquivos"]:
-            for arq_path in row["arquivos"].split(";"):
-                arq_path = arq_path.strip()
-                if arq_path and os.path.exists(arq_path):
-                    with open(arq_path, "rb") as f:
-                        st.download_button(
-                            f"Baixar: {os.path.basename(arq_path)} (Profissional: {row['nome']})",
-                            data=f.read(),
-                            file_name=os.path.basename(arq_path),
-                            key=f"{arq_path}_{idx}"
-                        )
-excel_buffer = io.BytesIO()
-df_filtro.to_excel(excel_buffer, index=False, engine='openpyxl')
-excel_buffer.seek(0)
-st.download_button(
-    "Exportar para Excel",
-    data=excel_buffer,
-    file_name="cadastros_filtrados.xlsx"
-)
+        for idx, row in df_filtro.iterrows():
+            if row["arquivos"]:
+                for arq_path in row["arquivos"].split(";"):
+                    arq_path = arq_path.strip()
+                    if arq_path and os.path.exists(arq_path):
+                        with open(arq_path, "rb") as f:
+                            st.download_button(
+                                f"Baixar: {os.path.basename(arq_path)} (Profissional: {row['nome']})",
+                                data=f.read(),
+                                file_name=os.path.basename(arq_path),
+                                key=f"{arq_path}_{idx}"
+                            )
+    
+        # Exportação: agora SIM seguro!
+        if not df_filtro.empty:
+            csv = df_filtro.to_csv(index=False).encode("utf-8")
+            st.download_button("Exportar para CSV", data=csv, file_name="cadastros_filtrados.csv")
+    
+            excel_buffer = io.BytesIO()
+            df_filtro.to_excel(excel_buffer, index=False, engine='openpyxl')
+            excel_buffer.seek(0)
+            st.download_button(
+                "Exportar para Excel",
+                data=excel_buffer,
+                file_name="cadastros_filtrados.xlsx"
+            )
+        else:
+            st.info("Nenhum cadastro para exportar.")
